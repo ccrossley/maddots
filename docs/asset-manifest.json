@@ -1,6 +1,6 @@
 {
-  "main.css": "https://ccrossley.github.io/maddots/static/css/main.fd1566ae.css",
-  "main.css.map": "https://ccrossley.github.io/maddots/static/css/main.fd1566ae.css.map",
-  "main.js": "https://ccrossley.github.io/maddots/static/js/main.ef4d4660.js",
-  "main.js.map": "https://ccrossley.github.io/maddots/static/js/main.ef4d4660.js.map"
+  "main.css": "static/css/main.fd1566ae.css",
+  "main.css.map": "static/css/main.fd1566ae.css.map",
+  "main.js": "static/js/main.ef4d4660.js",
+  "main.js.map": "static/js/main.ef4d4660.js.map"
 }
