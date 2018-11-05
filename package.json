@@ -2,6 +2,7 @@
   "name": "maddie-game",
   "version": "1.0.0",
   "private": true,
+  "homepage": "https://ccrossley.github.io/maddots",
   "dependencies": {
     "@hughsk/fulltilt": "^0.7.1",
     "color-scheme": "^1.0.1",
@@ -18,6 +19,11 @@
     "start": "react-scripts start",
     "build": "react-scripts build && cp ./build/static/css/main.*.css ./docs/static/css/main.css && cp ./build/static/js/main.*.js ./docs/static/js/main.js",
     "test": "react-scripts test --env=jsdom",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
+  },
+  "devDependencies": {
+    "gh-pages": "^2.0.0"
   }
 }

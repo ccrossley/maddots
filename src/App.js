@@ -4,7 +4,7 @@ import './App.css';
 import tinycolor from 'tinycolor2'
 import ColorScheme from 'color-scheme'
 import KeyCodes from './KeyCodes.js'
-import AppInput from './AppInput.js'
+import AppInput, {InputModes} from './AppInput.js'
 
 const DotColorMethods = {
     Complementary: 0,
@@ -25,8 +25,8 @@ const DotBox = {
 
 const NUM_DOTS = 33
 const DOT_SIZE = 100
-const TRANSITION_SECONDS = 1
-const TRANSITION_VARIANCE = 0.5
+const TRANSITION_SECONDS = 0.5
+const TRANSITION_VARIANCE = 2.5
 const TOTAL_TRANSITION_MS = (TRANSITION_SECONDS + TRANSITION_VARIANCE) * 1000
 
 class App extends Component {
@@ -34,21 +34,23 @@ class App extends Component {
     constructor() {
         super()
 
-	    this.input = new AppInput()
+	    this.input = new AppInput(InputModes.Motion, this.onMobileChange)
 
 	    this.currentColorMethod = DotColorMethods.Monochromatic
 
-	    this.defaultDotColor = tinycolor("grey")
-        this.defaultBackgroundColor = tinycolor("black")
+	    this.defaultBackgroundColor = tinycolor("black")
+	    this.defaultDotColor = tinycolor("white")
+
         this.errorColor = tinycolor("pink")
 
         let count = 0
 
         for (let key in KeyCodes) {
-	        const colors = this.getColorsFromMethod(this.currentColorMethod)
+	        const colors = this.getColorsFromMethod(this.currentColorMethod, tinycolor.random())
 	        const tinyColors = this.schemeColorsToTinyColors(colors)
 
             KeyCodes[key] = {
+	        	key: key,
                 colors: tinyColors,
             	color: tinyColors[count % colors.length],
 	            inUse: false,
@@ -75,10 +77,20 @@ class App extends Component {
         }
     }
 
-	getDotColor = (i, method, defaultColor) => {
-    	const colors = this.getColorsFromMethod(method, defaultColor)
+    onMobileChange = (newColor) => {
+    	this.setState({
+		    theColor: newColor,
+	    })
+    }
 
-		return colors[i % colors.length] || defaultColor
+	getDotColor = (i, method, defaultColor) => {
+    	const colors = this.getDotColorsFromMethod(method, defaultColor)
+
+		return colors[i % colors.length] || this.defaultDotColor
+	}
+
+	getDotColorsFromMethod = (method, hintColor = null) => {
+		return this.getColorsFromMethod(method, hintColor).splice(1)
 	}
 
 	getColorsFromMethod = (method, hintColor = null) => {
@@ -96,7 +108,26 @@ class App extends Component {
 	    }
 
     	const scheme = new ColorScheme()
-		return scheme.from_hex(hintColor.toHex()).scheme(schemeName).colors()
+
+		const colors = scheme.from_hex(hintColor.toHex()).scheme(schemeName).colors()
+
+		// for some reason ColorScheme likes to do a black, black, white, white when monochromatic is used
+		// with black.  this means we need to filter out common blacks and whites from the returned list
+
+		const resultColors = []
+
+		const uniquer = {}
+
+		for (let i = 0; i < colors.length; i++) {
+			let color = colors[i]
+
+			if (!uniquer.hasOwnProperty(color)) {
+				resultColors.push(color)
+				uniquer[color] = true
+			}
+		}
+
+		return resultColors
 	}
 
 	methodToScheme = (method) => {
@@ -126,7 +157,7 @@ class App extends Component {
 	makeDot = (i, x, y) => {
 		return {
 			index: i,
-			tc: this.getDotColor(i, this.currentColorMethod, this.defaultDotColor.complement()),
+			tc: this.getDotColor(i, this.currentColorMethod, this.defaultDotColor),
 			x: x,
 			y: y,
 		}
@@ -161,7 +192,7 @@ class App extends Component {
 
     calculateTheColor = () => {
 
-        const accumulator = {
+        let accumulator = {
             r: 0,
             b: 0,
             g: 0,
@@ -174,19 +205,27 @@ class App extends Component {
 
             const nextColor = KeyCodes[key]
 
-            if (nextColor && nextColor.inUse) {
+	        const numKey = parseInt(key, 10)
 
-                accumulator.r += nextColor.color._r
-                accumulator.b += nextColor.color._b
-                accumulator.g += nextColor.color._g
+	        // ignore shift because it's one of our debug keys
+            if (numKey !== 16 && nextColor && nextColor.inUse) {
+            	const rgb = nextColor.color.toRgb()
+
+                accumulator.r += rgb.r
+                accumulator.b += rgb.b
+                accumulator.g += rgb.g
 
                 count++
             }
         }
 
-        accumulator.r /= count
-        accumulator.b /= count
-        accumulator.g /= count
+        if (count) {
+	        accumulator.r /= count
+	        accumulator.b /= count
+	        accumulator.g /= count
+        }else {
+        	accumulator = this.defaultBackgroundColor.toRgb()
+        }
 
         return tinycolor(accumulator)
     }
@@ -207,12 +246,15 @@ class App extends Component {
     }
 
     key = (keyCode, inUse) => {
+
         const color = KeyCodes[keyCode]
 
         color.inUse = inUse
 
+	    let newColor = this.calculateTheColor() || this.defaultBackgroundColor
+
         this.setState({
-            theColor: this.calculateTheColor() || this.defaultBackgroundColor,
+            theColor: this.input.color(newColor),
         })
     }
 
@@ -249,7 +291,10 @@ class App extends Component {
 
             dot.color = this.getDotColor(i, this.currentColorMethod, this.state.theColor)
 
-            const size = `${DOT_SIZE}px`
+	        const dotSize = (Math.max(DotBox.width,  DotBox.height)) / 20
+
+            const size = `${dotSize}px`
+
             const tTime = (TRANSITION_SECONDS + (TRANSITION_VARIANCE * Math.random()))
 
             const dotStyle = {
@@ -258,9 +303,13 @@ class App extends Component {
                 position: "absolute",
                 backgroundColor: `${dot.color.toHexString()}`,
                 borderRadius: "50%",
-                //display: "inline",
+                display: "inline-block",
                 transform: `translateX(${dot.x}px) translateY(${dot.y}px)`,
                 transition: `transform ${tTime}s ease-in-out, background-color 250ms linear`,
+            }
+
+            if (KeyCodes[16].inUse) { //shift
+            	dotStyle.border = "5px solid red"
             }
 
             dots.push(
@@ -279,24 +328,32 @@ class App extends Component {
 	    const labelColors = this.state.theColor.monochromatic(6)
 	    const labelColor = labelColors[2]
 
-	    console.log(labelColor)
-
 	    const labelStyle = {
 		    margin: 0,
 		    color: labelColor.toHexString(),
 	    }
 
 		const divStyle = {
-			height: DotBox.height, width: DotBox.width,
+			width: DotBox.width,
+			height: DotBox.height,
 			backgroundColor: this.state.theColor.toHexString(),
 		}
+
+		const debugLabel =  null /*<h2 style={labelStyle}>
+								{JSON.stringify(this.input.color(this.state.theColor.toRgb()))}
+							</h2>*/
+
+		const debugColors = this.getColorsFromMethod(this.currentColorMethod, this.defaultDotColor)
 
         return (
             <div tabIndex={0} className="App" onKeyDown={this.keyDown} onKeyUp={this.keyUp} onClick={this.click}
                  style={divStyle}>
-	            <h1 style={labelStyle}>
-		            {`${dotsKeys[this.currentColorMethod]} ${this.input.data.do.alpha} ${this.input.data.do.beta} ${this.input.data.do.gamma}`}
-		        </h1>
+	            <h2 style={labelStyle}>
+		            {`${dotsKeys[this.currentColorMethod]} ${this.input.mode()}`}
+		        </h2>
+
+	            {debugLabel}
+
                 {this.getDots()}
             </div>
 

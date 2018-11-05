@@ -1,55 +1,43 @@
-import GyroNorm from 'gyronorm'
+import tinycolor from 'tinycolor2'
 
 export const InputModes = {
-	MOTION: 0,
-	MOUSE: 1,
-	// KEYBOARD: 2,
+	Motion: 0,
+	Keyboard: 1,
+	Mouse: 2,
 }
+
+let version = 0
 
 export default class AppInput {
 
-	constructor(requestedMode) {
-		const args = {
-			frequency:50,					// ( How often the object sends the values - milliseconds )
-			gravityNormalized:true,			// ( If the gravity related values to be normalized )
-			orientationBase:GyroNorm.WORLD,		// ( Can be GyroNorm.GAME or GyroNorm.WORLD. gn.GAME returns orientation values with respect to the head direction of the device. gn.WORLD returns the orientation values with respect to the actual north direction of the world. )
-			decimalCount:2,					// ( How many digits after the decimal point will there be in the return values )
-			logger:null,					// ( Function to be called to log messages from gyronorm.js )
-			screenAdjusted:false			// ( If set to true it will return screen adjusted values. )
+	constructor(requestedMode, changeFunc) {
+		this._rawData = {
+			version: -1,
+			gamma: 0,
+			delta: 0,
+			alpha: 0,
 		}
 
-		this._data = {
-			do: {
-				alpha: 0,
-				beta: 0,
-				gamma: 0,
-				absolute: 0,
-			},
-			dm: {
-				x: 0,
-				y: 0,
-				z: 0,
-				gx: 0,
-				gy: 0,
-				gz: 0,
-				alpha: 0,
-				beta: 0,
-				gamma: 0,
-			}
+		this.onChange = changeFunc
+
+		if (requestedMode === InputModes.Motion && window.DeviceOrientationEvent) {
+			this._inputMode = InputModes.Motion
+			window.addEventListener("deviceorientation", this._newData, true)
+		}else if (requestedMode === InputModes.Motion) {
+			this._inputMode = InputModes.Keyboard
+		} else {
+			this._inputMode = requestedMode
 		}
-
-		this._inputMode = requestedMode || InputModes.MOTION
-
-		this._gn = new GyroNorm(args)
-
-		this._gn.init().then(() => {
-			this._gn.stack(this._newData)
-		}).catch(this._gyroError)
 	}
 
-	_newData(data) {
-		console.log(`input MODE: ${this.mode()} DATA: `, data)
-		this._data = data
+	_newData = (data) => {
+		data.version = JSON.stringify(data)
+
+		this._rawData = data
+
+		if (this.onChange) {
+			this.onChange(this.color())
+		}
 	}
 
 	mode = () => {
@@ -63,11 +51,49 @@ export default class AppInput {
 	}
 
 	get data() {
-		return this._data
+
+		const g = this._rawData.gamma || 0
+		const d = this._rawData.delta || 0
+		const a = this._rawData.alpha || 0
+
+		return {
+			version: this._rawData.version,
+			red: (((g + 90) * 2) / 360) * 255,
+			blue: ((d + 180) / 360) * 255,
+			green: (a / 360) * 255,
+		}
 	}
 
-	_gyroError = (event) => {
-		this._inputMode = InputModes.MOUSE
-		console.log(`gyro error: ${event}. switching to ${this.mode()}`)
+	color = (defaultColor) => {
+		let color = tinycolor("pink")
+
+		let usefulMode = this._inputMode
+		const mc = this.data
+
+		if (usefulMode === InputModes.Motion && mc && mc.version === -1) {
+			usefulMode = InputModes.Keyboard
+		}
+
+		switch(usefulMode) {
+			case InputModes.Motion:
+				color = tinycolor(`rgb(${mc.red.toFixed(2)}, ${mc.green.toFixed(2)}, ${mc.blue.toFixed(2)})`)
+				break;
+			case InputModes.Mouse:
+			case InputModes.Keyboard:
+			default:
+				color = defaultColor
+		}
+
+		console.log(`${usefulMode} ${color}`)
+
+		return color
 	}
+
+	get version() {
+		return version
+	}
+}
+
+function clamp(v, min, max) {
+	return Math.max(min, Math.min(v, max));
 }
